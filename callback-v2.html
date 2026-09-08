@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-SlXJICJpaPvmggKPnnASZ/r/oJbNlCrtw0bVJoYeZYg='; base-uri 'none'; form-action 'none'">
+<title>Return to local enrollment</title>
+</head>
+<body>
+<p id="status">Returning to the local enrollment application.</p>
+<noscript>JavaScript is required. Close this tab and restart enrollment in the local application. Do not copy the address.</noscript>
+<script>
+(function () {
+  'use strict';
+  // Capture in memory, then remove query/fragment before parsing or rendering.
+  var query = window.location.search;
+  var fragment = window.location.hash;
+  try {
+    window.history.replaceState(null, '', window.location.pathname);
+  } catch (_) {
+    return; // Never forward if removing the response from history failed.
+  }
+  try {
+    if (fragment || !query || query.length > 16384 || query[0] !== '?') throw new Error();
+    // URLSearchParams tolerates malformed percent encoding; reject it first.
+    decodeURIComponent(query.replace(/\+/g, ' '));
+    var params = new URLSearchParams(query);
+    var keys = Array.from(params.keys());
+    if (keys.some(function (key) { return !['code', 'state', 'error'].includes(key); }) ||
+        new Set(keys).size !== keys.length || keys.length !== 2) throw new Error();
+    var state = params.get('state');
+    if (!state || !/^[A-Za-z0-9_-]{1,128}$/.test(state)) throw new Error();
+    var outgoing = new URLSearchParams();
+    outgoing.set('state', state);
+    if (params.has('code') && !params.has('error')) {
+      var code = params.get('code');
+      if (!code || code.length > 8192 || !/^[\x21-\x7e]+$/.test(code)) throw new Error();
+      outgoing.set('code', code);
+    } else if (params.has('error') && !params.has('code') &&
+        ['access_denied', 'invalid_request', 'unauthorized_client', 'unsupported_response_type', 'invalid_scope', 'server_error', 'temporarily_unavailable'].includes(params.get('error'))) {
+      outgoing.set('error', params.get('error'));
+    } else throw new Error();
+    // Fixed destination only. State and PKCE are checked by the local process.
+    window.location.replace('http://127.0.0.1:8765/oauth/callback?' + outgoing.toString());
+  } catch (_) {
+    document.getElementById('status').textContent = 'Authorization response refused. Return to the local application and restart enrollment.';
+  }
+})();
+</script>
+</body>
+</html>
